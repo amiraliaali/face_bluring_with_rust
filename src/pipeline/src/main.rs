@@ -1,17 +1,13 @@
 mod helpers;
 
 use anyhow::Result;
-use helpers::{black_out, draw_rectangle, nms, Detection, mat_to_rgba, rgba_to_mat};
-use image::io::Reader as ImageReader;
-use image::{GenericImageView, Rgba, RgbaImage};
+use helpers::{nms, Detection};
 use onnxruntime::environment::Environment;
 use onnxruntime::ndarray::{Array4, ArrayD, Axis};
 use onnxruntime::GraphOptimizationLevel;
-use opencv::{
-    core,
-    prelude::*,
-    videoio,
-};
+use opencv::imgproc::FILLED;
+
+use opencv::{core, prelude::*, videoio};
 
 fn main() -> Result<()> {
     let environment = Environment::builder().with_name("face_blur").build()?;
@@ -24,10 +20,7 @@ fn main() -> Result<()> {
 
     println!("Model loaded successfully!");
 
-    let mut cap = videoio::VideoCapture::from_file(
-        "test_videos/vid_3.mp4",
-        videoio::CAP_ANY,
-    )?;
+    let mut cap = videoio::VideoCapture::from_file("test_videos/vid_4.mp4", videoio::CAP_ANY)?;
 
     if !cap.is_opened()? {
         panic!("Cannot open video");
@@ -39,12 +32,14 @@ fn main() -> Result<()> {
         panic!("Video is empty");
     }
 
-    let frame_size = frame.size()?;
+
+    let orig_width = frame.cols();
+    let orig_height = frame.rows();
 
     let fourcc = videoio::VideoWriter::fourcc('m', 'p', '4', 'v')?;
 
     let mut writer = videoio::VideoWriter::new(
-        "test_videos/vid_3_processed.mp4",
+        "test_videos/vid_4_processed.mp4",
         fourcc,
         30.0,
         frame.size()?,
@@ -54,26 +49,36 @@ fn main() -> Result<()> {
     loop {
         cap.read(&mut frame)?;
 
-        if frame.empty(){
+        if frame.empty() {
             break;
         }
 
         // println!("Processed frame!");
 
-        let mut output_img = mat_to_rgba(&frame)?;
-        let (orig_width, orig_height) = (output_img.width(), output_img.height());
-        let resized_img = image::imageops::resize(
-            &output_img,
-            640,
-            640,
-            image::imageops::FilterType::Triangle,
-        );
+        let mut resized_frame = Mat::default();
+        opencv::imgproc::resize(
+            &frame,
+            &mut resized_frame,
+            core::Size {
+                width: 640,
+                height: 640,
+            },
+            0.0,
+            0.0,
+            opencv::imgproc::INTER_LINEAR,
+        )?;
 
+        let mut img_tensor: Array4<f32> = Array4::zeros((1, 3, 640, 640));
 
-        let img_tensor: Array4<f32> = Array4::from_shape_fn((1, 3, 640, 640), |(_, c, y, x)| {
-            let pixel = resized_img.get_pixel(x as u32, y as u32);
-            pixel[c] as f32 / 255.0
-        });
+        for y in 0..640 {
+            for x in 0..640 {
+                let pixel = resized_frame.at_2d::<core::Vec3b>(y as i32, x as i32)?;
+                img_tensor[[0, 0, y as usize, x as usize]] = pixel[2] as f32 / 255.0; // R
+                img_tensor[[0, 1, y as usize, x as usize]] = pixel[1] as f32 / 255.0; // G
+                img_tensor[[0, 2, y as usize, x as usize]] = pixel[0] as f32 / 255.0;
+                // B
+            }
+        }
 
         let input_tensor: ArrayD<f32> = img_tensor.into_dyn();
         // println!("Image prepared for inference.");
@@ -120,18 +125,24 @@ fn main() -> Result<()> {
         // println!("Detections after NMS: {}", final_detections.len());
 
         for det in final_detections {
-            black_out(
-                &mut output_img,
-                det.x1 as u32,
-                det.y1 as u32,
-                det.x2 as u32,
-                det.y2 as u32,
+            let roi = core::Rect::new(
+                det.x1 as i32,
+                det.y1 as i32,
+                (det.x2 - det.x1) as i32,
+                (det.y2 - det.y1) as i32,
             );
+
+            opencv::imgproc::rectangle(
+                &mut frame,
+                roi,
+                core::Scalar::all(0.0),
+                FILLED,
+                opencv::imgproc::LINE_8,
+                0,
+            )?;
         }
 
-        let frame_to_write = rgba_to_mat(&output_img)?;
-        writer.write(&frame_to_write)?;
-
+        writer.write(&frame)?;
     }
 
     Ok(())

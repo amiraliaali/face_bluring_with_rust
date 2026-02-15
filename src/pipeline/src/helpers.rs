@@ -1,10 +1,4 @@
 use image::{Rgba, RgbaImage};
-use opencv::core::Mat;
-use opencv::imgproc;
-use opencv::prelude::{MatTraitConst, MatTraitConstManual, MatTrait};
-use anyhow::Result;
-
-
 
 #[derive(Clone)]
 pub struct Detection {
@@ -37,17 +31,6 @@ pub fn draw_rectangle(img: &mut RgbaImage, x1: u32, y1: u32, x2: u32, y2: u32, c
     }
 }
 
-pub fn black_out(img: &mut RgbaImage, x1: u32, y1: u32, x2: u32, y2: u32) {
-    let (width, height) = img.dimensions();
-    let color: Rgba<u8> = Rgba([0, 0, 0, 255]);
-
-    for x in x1..=x2.min(width - 1) {
-        for y in y1..=y2.min(height - 1) {
-            img.put_pixel(x, y, color);
-        }
-    }
-}
-
 pub fn iou(a: &Detection, b: &Detection) -> f32 {
     let x1 = a.x1.max(b.x1);
     let y1 = a.y1.max(b.y1);
@@ -75,31 +58,4 @@ pub fn nms(mut dets: Vec<Detection>, iou_thresh: f32) -> Vec<Detection> {
     }
 
     result
-}
-
-
-pub fn mat_to_rgba(mat: &Mat) -> Result<RgbaImage> {
-    let mut mat_rgba = Mat::default();
-    imgproc::cvt_color(mat, &mut mat_rgba, imgproc::COLOR_BGR2RGBA, 0)?;
-
-    let (width, height) = (mat_rgba.cols(), mat_rgba.rows());
-    let data = mat_rgba.data_bytes()?;
-
-    let img = RgbaImage::from_raw(width as u32, height as u32, data.to_vec())
-        .ok_or_else(|| anyhow::anyhow!("Failed to convert Mat to RgbaImage"))?;
-
-    Ok(img)
-}
-
-pub fn rgba_to_mat(img: &RgbaImage) -> Result<Mat> {
-    let img_vec = img.to_vec();
-
-    let mat = Mat::from_slice(&img_vec)?;
-
-    let mat = mat.reshape(4, img.height() as i32)?;
-
-    let mut mat_bgr = Mat::default();
-    imgproc::cvt_color(&mat, &mut mat_bgr, imgproc::COLOR_RGBA2BGR, 0)?;
-
-    Ok(mat_bgr)
 }
