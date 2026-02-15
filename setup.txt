@@ -1,0 +1,30 @@
+1- Build ONNX Runtime from source:
+    # Clone repo
+    git clone --recursive https://github.com/microsoft/onnxruntime
+    cd onnxruntime
+
+    # Build shared library only, skip tests (faster)
+    ./build.sh --config Release --build_shared_lib --skip_tests
+
+2- Since my cmake version was old I had to update:
+    # Remove old version if needed
+    sudo apt remove cmake
+
+    # Add Kitware repo and key
+    sudo apt update
+    sudo apt install -y software-properties-common apt-transport-https ca-certificates gnupg
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+    echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ jammy main' | sudo tee /etc/apt/sources.list.d/kitware.list
+    sudo apt update
+    sudo apt install cmake
+    cmake --version  # Should show >= 3.28
+    # and then run again:
+    ./build.sh --config Release --build_shared_lib --skip_tests
+
+3- Tell Rust where the library is:
+    export ORT_SYSTEM_LIB_PATH=/home/amirali/self/repositories/face_bluring_with_rust/onnxruntime/build/Linux/Release
+    export ORT_INCLUDE_PATH=/home/amirali/self/repositories/face_bluring_with_rust/onnxruntime/include
+
+4- Then run the code again:
+    cargo clean
+    cargo run

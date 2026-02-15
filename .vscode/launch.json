@@ -16,7 +16,7 @@
             "name": "Extract model ONNX",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/model_extraction.py",
+            "program": "${workspaceFolder}/src/model_extraction/model_extraction.py",
             "console": "integratedTerminal"
         }
     ]
