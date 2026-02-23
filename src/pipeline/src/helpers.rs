@@ -1,4 +1,5 @@
 use image::{Rgba, RgbaImage};
+use std::ffi::{CStr, CString};
 
 #[derive(Clone)]
 pub struct Detection {
@@ -7,6 +8,44 @@ pub struct Detection {
     pub x2: f32,
     pub y2: f32,
     pub conf: f32,
+}
+
+pub fn preload_ort_global() {
+
+    let ort_core = std::env::var("ORT_DYLIB_PATH").unwrap_or_else(|_| {
+        "/home/amirali/.local/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime.so.1.23.2".to_string()
+    });
+    // export ORT_DYLIB_PATH=/home/amirali/.local/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime.so.1.23.2
+    // export LD_LIBRARY_PATH=/home/amirali/.local/lib/python3.10/site-packages/onnxruntime/capi:$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+
+    let ort_dir = std::path::Path::new(&ort_core)
+        .parent()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    let providers_shared = format!("{}/libonnxruntime_providers_shared.so", ort_dir);
+
+    unsafe {
+        libc::dlerror();
+
+        for p in [&ort_core, &providers_shared] {
+            let c_path = CString::new(p.as_str()).unwrap();
+            let handle = libc::dlopen(c_path.as_ptr(), libc::RTLD_NOW | libc::RTLD_GLOBAL);
+
+            if handle.is_null() {
+                let err = libc::dlerror();
+                let msg = if err.is_null() {
+                    "unknown dlopen error".to_string()
+                } else {
+                    CStr::from_ptr(err).to_string_lossy().into_owned()
+                };
+                eprintln!("Preload failed: {}\n  dlerror: {}", p, msg);
+            } else {
+                println!("Preloaded (GLOBAL): {}", p);
+            }
+        }
+    }
 }
 
 pub fn draw_rectangle(img: &mut RgbaImage, x1: u32, y1: u32, x2: u32, y2: u32, color: Rgba<u8>) {
